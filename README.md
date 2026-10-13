@@ -1,0 +1,80 @@
+# WF810DF – ImmortalWrt, kernel tùy chỉnh (thử nghiệm)
+
+> **Repo thử nghiệm kernel.** Bản ổn định để dùng hằng ngày: [wf810df-fw](https://github.com/TiepPham0812/wf810df-fw). Repo này chép từ đó và thêm phần tùy chỉnh kernel cho đúng phần cứng WF-810DF. Thay đổi nào chạy ổn trên máy thật thì mới đưa ngược về `wf810df-fw`.
+
+## Tùy chỉnh kernel
+
+- Sửa `kernel/wf810df.config` (cú pháp `.config` của kernel: `CONFIG_X=y`, `=m`, `# CONFIG_X is not set`). Mỗi dòng ghi kèm lý do.
+- Bước 6c chèn file này vào cuối cấu hình kernel ipq50xx của ImmortalWrt (ghi đè mặc định).
+- Bước 10b kiểm tra từng dòng đã thật sự vào kernel; kernel không nhận (thiếu phụ thuộc) thì build báo lỗi.
+- Mỗi bản build xuất `kernel-config-wf810df.txt` vào Releases: cấu hình kernel thật sự đã build, dùng làm căn cứ cho lần sửa sau.
+- Bản vá kernel riêng: đặt vào `device/target/linux/qualcommax/patches-6.12/` (đánh số 9xx để chạy sau bản vá gốc).
+- **Luôn chạy thử bản `initramfs` trong RAM trước** khi nạp NAND bản kernel đã sửa.
+
+## Gốc (từ wf810df-fw)
+
+
+Biên dịch **ImmortalWrt chính hãng** cho **FPT AX3000CV2 bản CV2 (vỏ vuông)** — Actiontec/CIG WF-810DF, Qualcomm IPQ5018 — trên GitHub Actions, không cần máy Linux.
+
+> ⚠️ **Chỉ dành cho CV2 (vỏ vuông).** CV1 (vỏ tròn) dùng phần cứng mạng khác, không nạp bản này.
+
+## Nguồn
+
+- Nền thiết bị (cây thiết bị, driver switch YT9215S, board data Wi-Fi): [zcop/immortalwrt](https://github.com/zcop/immortalwrt/tree/wf810df-25.12) nhánh `wf810df-25.12`.
+- Driver YT921x gốc: David Yang (mmyangfl), backport từ Linux 6.19.
+- Port ban đầu và hướng dẫn nạp: [michioxd/openwrt-wf810df](https://github.com/michioxd/openwrt-wf810df).
+- Thảo luận, phân tích lỗi: [VOZ – OpenWrt cho FPT AX3000CV2](https://voz.vn/t/openwrt-cho-fpt-ax3000cv2-voc.1206194/).
+
+## Khác biệt so với bản michioxd
+
+| | michioxd | Repo này (theo zcop) |
+|---|---|---|
+| Kết nối switch | MDIO bit-bang, có reset cứng | MDIO1, **bỏ qua reset cứng** |
+| Cổng CPU ↔ switch | 2500base-x | **SGMII 1000 Mbps** |
+| Hiệu chuẩn 5 GHz | offset `0x4C000` | **`0x26800`** |
+| 3 cổng LAN | không lên link | đã chạy trên bản của zcop |
+| Treo khi khởi động do driver CMN PLL | có nguy cơ | **đã vá** (bản vá của Stanislaw Pal) |
+
+## Gói có sẵn trong firmware
+
+LuCI tiếng Việt, ttyd, htop, ethtool, tcpdump-mini, **Tailscale**, **WireGuard**, **SQM (cake)**, **File Manager**. Các gói cần kmod phải nằm sẵn ở đây vì kernel tự build (xem mục *Cài gói sau khi nạp*). Bộ gói SQM/WireGuard/File Manager và bộ đệm ccache lấy theo [diepkhoa/sdmc-nr3053-repo](https://github.com/diepkhoa/sdmc-nr3053-repo) (bản NR3053, MediaTek) — chỉ lấy phần dùng chung được, không lấy phần cứng.
+
+## Cách build
+
+1. Tab **Actions** → **Build WF810DF - ImmortalWrt tu ma nguon** → **Run workflow**.
+2. `iw_ref`: phiên bản ImmortalWrt (vd `v25.12.2`). `extra_packages`: gói thêm (vd `luci-app-sqm wireguard-tools`).
+3. Chờ 2–4 giờ (lần đầu); các lần sau nhanh hơn nhờ ccache. File ở tab **Releases**:
+   - `...-squashfs-factory.ubi` — nạp lần đầu
+   - `...-initramfs-uImage.itb` — chạy thử trong RAM, không ghi NAND
+   - `...-squashfs-sysupgrade.bin` — nâng cấp về sau từ LuCI
+   - `kmods-wf810df.tar.gz` — toàn bộ kmod của đúng kernel này
+
+## Cài gói sau khi nạp
+
+- **Gói thường** (luci-app-*, công cụ): `apk update && apk add <gói>` từ kho ImmortalWrt.
+- **Gói kmod-\***: firmware đã trỏ sẵn tới kho kmod riêng của repo trên GitHub Pages, nên chỉ cần `apk update && apk add kmod-<tên>`. Kho này luôn là của **bản build mới nhất**; router đang chạy bản cũ hơn thì apk sẽ báo không khớp kernel → nâng cấp firmware, hoặc dùng `kmods-wf810df.tar.gz` của đúng bản trong Releases (`apk add --allow-untrusted /tmp/kmod-<tên>*.apk`).
+
+### Thiết lập một lần cho kho kmod
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+2. Tạo khoá ký (máy có OpenSSL): `openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem`, rồi dán toàn bộ nội dung file vào **Settings → Secrets and variables → Actions → New repository secret**, tên `APK_SIGN_KEY`. Không commit file này vào repo.
+   Không có secret thì mỗi bản build tự tạo khoá mới, router chỉ tin kho kmod của đúng bản nó đang chạy.
+
+## Cách nạp
+
+1. **Sao lưu toàn bộ NAND bản gốc trước tiên** — làm theo mục *0. Back up the original firmware* trong [README của michioxd](https://github.com/michioxd/openwrt-wf810df).
+2. **Chạy thử trong RAM** (không ghi NAND, rút điện là về như cũ), từ U-Boot:
+   ```
+   tftpboot 0x44000000 initramfs.itb
+   bootm 0x44000000
+   ```
+   Kiểm tra: 3 cổng LAN lên link, Wi-Fi 2.4/5 GHz phát được, `dmesg | grep -i yt921`.
+3. Ổn rồi mới nạp `factory.ubi` theo mục *1. Flash firmware* và *2. Set the startup environment* trong README của michioxd.
+
+## Gợi ý sau khi chạy
+
+- **Packet steering đã bật sẵn**: WAN→LAN từ ~600–700 lên ~940 Mbps theo đo đạc trên VOZ.
+- Máy có thể lên **80°C+** khi tải nặng lâu — để nơi thoáng.
+
+## Cảnh báo
+
+Firmware thử nghiệm, chưa được kiểm chứng trên máy thật từ repo này. Tự chịu rủi ro.
