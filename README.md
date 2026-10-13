@@ -52,7 +52,7 @@ LuCI tiếng Việt, ttyd, htop, ethtool, tcpdump-mini, **Tailscale**, **WireGua
 ## Cài gói sau khi nạp
 
 - **Gói thường** (luci-app-*, công cụ): `apk update && apk add <gói>` từ kho ImmortalWrt.
-- **Gói kmod-\***: mỗi firmware trỏ tới kho kmod **của đúng bản build đó** (`.../kmods/<tên-bản-build>/packages/`), nên chỉ cần `apk update && apk add kmod-<tên>`, kể cả khi đã có bản build mới đổi kernel. GitHub Pages giữ kho của 8 bản build gần nhất (`KEEP_KMOD_BUILDS` trong workflow); bản cũ hơn nữa thì lấy `kmods-wf810df.tar.gz` của đúng bản trong Releases (lưu vĩnh viễn) và `apk add --allow-untrusted /tmp/kmod-<tên>*.apk`.
+- **Gói kmod-\***: mỗi firmware trỏ tới kho kmod **của đúng bản build đó** (`.../kmods/<tên-bản-build>/packages/`), nên chỉ cần `apk update && apk add kmod-<tên>`, kể cả khi đã có bản build mới đổi kernel. GitHub Pages giữ kho theo kiểu cuốn chiếu: thêm các bản từ mới đến cũ cho tới khi chạm 900 MB (`PAGES_MAX_MB` trong workflow) thì bỏ bản cũ nhất; bản đã bị cuốn khỏi Pages thì lấy `kmods-wf810df.tar.gz` của đúng bản trong Releases (lưu vĩnh viễn) và `apk add --allow-untrusted /tmp/kmod-<tên>*.apk`.
 
 ### Thiết lập một lần cho kho kmod
 1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**

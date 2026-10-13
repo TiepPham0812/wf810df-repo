@@ -31,8 +31,9 @@ jobs:
     env:
       # Ten ban build = tag Releases = thu muc kho kmod rieng cua ban nay
       TAG: wf810df-${{ inputs.iw_ref }}-b${{ github.run_number }}
-      # So ban build cu giu lai kho kmod tren GitHub Pages (moi ban ~55 MB, gioi han Pages 1 GB)
-      KEEP_KMOD_BUILDS: 8
+      # Kho kmod tren GitHub Pages cuon chieu: them ban cu (moi -> cu) toi khi cham nguong
+      # nay thi dung, bo ban cu nhat. Moi ban ~55 MB; gioi han Pages 1 GB.
+      PAGES_MAX_MB: 900
     # Moi truong github-pages: can de buoc 14 dang kho kmod.
     environment:
       name: github-pages
@@ -255,25 +256,31 @@ jobs:
           P=bin/targets/qualcommax/ipq50xx/packages
           test -s $P/packages.adb || { echo "LOI: thieu packages.adb (chi muc kho kmod)"; exit 1; }
           W=../pages
-          # Ban hien tai: kmods/<TAG>/ (cho firmware nay) + packages/ (ban moi nhat,
-          # giu cho firmware cu da tro toi duong dan /packages/)
-          mkdir -p "$W/kmods/$TAG/packages" "$W/packages"
+          # Ban hien tai: kmods/<TAG>/ (firmware nay tro toi day)
+          mkdir -p "$W/kmods/$TAG/packages"
           cp -a $P/. "$W/kmods/$TAG/packages/"
-          cp -a $P/. "$W/packages/"
           cp public-key.pem "$W/public-key.pem"
-          # Cac ban build truoc: lay lai kmods-wf810df.tar.gz tu Releases (luu vinh vien)
-          # -> Pages luon co kho kmod cua KEEP_KMOD_BUILDS ban gan nhat.
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName --jq '.[].tagName' \
-            | grep '^wf810df-' | grep -vx "$TAG" | head -n "$KEEP_KMOD_BUILDS" > ../old-tags.txt || true
+          SZ=$(du -sm "$W" | cut -f1)
+          [ "$SZ" -le "$PAGES_MAX_MB" ] || { echo "LOI: rieng ban hien tai da ${SZ} MB > ${PAGES_MAX_MB} MB"; exit 1; }
+          # Cuon chieu: lay lai kho kmod cac ban truoc tu Releases (kmods-wf810df.tar.gz luu vinh vien),
+          # tu moi den cu; ban nao lam tong vuot PAGES_MAX_MB thi bo no va cac ban cu hon.
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[].tagName' \
+            | grep '^wf810df-' | grep -vx "$TAG" > ../old-tags.txt || true
           while read -r t; do
             [ -n "$t" ] || continue
             mkdir -p "$W/kmods/$t"
-            if gh release download "$t" --repo "$GITHUB_REPOSITORY" -p kmods-wf810df.tar.gz -O - 2>/dev/null \
-                 | tar -xz -C "$W/kmods/$t" && test -s "$W/kmods/$t/packages/packages.adb"; then
-              echo "OK  giu kho kmod $t"
-            else
-              echo "BO QUA $t (release khong co kmods-wf810df.tar.gz hop le)"; rm -rf "$W/kmods/$t"
+            if ! { gh release download "$t" --repo "$GITHUB_REPOSITORY" -p kmods-wf810df.tar.gz -O - 2>/dev/null \
+                   | tar -xz -C "$W/kmods/$t" && test -s "$W/kmods/$t/packages/packages.adb"; }; then
+              echo "BO QUA $t (release khong co kmods-wf810df.tar.gz hop le)"; rm -rf "$W/kmods/$t"; continue
             fi
+            SZ=$(du -sm "$W" | cut -f1)
+            if [ "$SZ" -gt "$PAGES_MAX_MB" ]; then
+              rm -rf "$W/kmods/$t"
+              echo "CUON CHIEU: dung o $t (tong se ${SZ} MB > ${PAGES_MAX_MB} MB) - ban nay va cu hon chi con trong Releases"
+              break
+            fi
+            echo "OK  giu kho kmod $t (tong ${SZ} MB)"
           done < ../old-tags.txt
           {
             echo '<h1>Kho kmod WF810DF</h1><p>Moi firmware tro toi kho cua dung ban build (xem /etc/apk/repositories.d/customfeeds.list).</p><ul>'
@@ -282,7 +289,7 @@ jobs:
           } > "$W/index.html"
           touch "$W/.nojekyll"
           du -sh "$W"; du -sh "$W"/kmods/*
-          SZ=$(du -sm "$W" | cut -f1); [ "$SZ" -lt 950 ] || { echo "LOI: trang Pages ${SZ} MB, sat gioi han 1 GB - giam KEEP_KMOD_BUILDS"; exit 1; }
+          SZ=$(du -sm "$W" | cut -f1); [ "$SZ" -le "$PAGES_MAX_MB" ] || { echo "LOI: trang Pages ${SZ} MB > ${PAGES_MAX_MB} MB"; exit 1; }
 
       - name: 14b. Dang kho kmod len GitHub Pages
         uses: actions/upload-pages-artifact@v3
