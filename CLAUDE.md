@@ -6,6 +6,7 @@
 - Bước 10b (kiểm tra tùy chỉnh đã vào kernel) **không được nới lỏng**. Kernel không nhận một dòng thì sửa phụ thuộc hoặc bỏ dòng đó, không tắt kiểm tra.
 - Không tắt trong kernel những thứ phần cứng đang dùng: YT921x/DSA, ath11k, SPI-NAND/UBI, CMN PLL, qca-ssdk... Có nghi ngờ thì để nguyên.
 - Thay đổi chạy ổn trên máy thật (đã thử initramfs, rồi NAND) mới đưa về `wf810df-fw`.
+- **Kho kmod theo từng bản build**: firmware trỏ `kmods/<TAG>/packages/packages.adb` (TAG = tag Releases). Bước 14a dựng lại trang Pages từ `kmods-wf810df.tar.gz` của `KEEP_KMOD_BUILDS` release gần nhất + bản hiện tại; `packages/` vẫn là bản mới nhất cho firmware cũ. Không đổi lại thành một kho chung: router chạy bản cũ sẽ không cài được kmod sau khi kernel đổi.
 - Các quy tắc bên dưới (chép từ wf810df-fw) vẫn áp dụng đầy đủ.
 
 # Quy tắc gốc từ wf810df-fw

@@ -52,7 +52,7 @@ LuCI tiếng Việt, ttyd, htop, ethtool, tcpdump-mini, **Tailscale**, **WireGua
 ## Cài gói sau khi nạp
 
 - **Gói thường** (luci-app-*, công cụ): `apk update && apk add <gói>` từ kho ImmortalWrt.
-- **Gói kmod-\***: firmware đã trỏ sẵn tới kho kmod riêng của repo trên GitHub Pages, nên chỉ cần `apk update && apk add kmod-<tên>`. Kho này luôn là của **bản build mới nhất**; router đang chạy bản cũ hơn thì apk sẽ báo không khớp kernel → nâng cấp firmware, hoặc dùng `kmods-wf810df.tar.gz` của đúng bản trong Releases (`apk add --allow-untrusted /tmp/kmod-<tên>*.apk`).
+- **Gói kmod-\***: mỗi firmware trỏ tới kho kmod **của đúng bản build đó** (`.../kmods/<tên-bản-build>/packages/`), nên chỉ cần `apk update && apk add kmod-<tên>`, kể cả khi đã có bản build mới đổi kernel. GitHub Pages giữ kho của 8 bản build gần nhất (`KEEP_KMOD_BUILDS` trong workflow); bản cũ hơn nữa thì lấy `kmods-wf810df.tar.gz` của đúng bản trong Releases (lưu vĩnh viễn) và `apk add --allow-untrusted /tmp/kmod-<tên>*.apk`.
 
 ### Thiết lập một lần cho kho kmod
 1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
