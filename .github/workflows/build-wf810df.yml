@@ -28,6 +28,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    env:
+      # Ten ban build = tag Releases = thu muc kho kmod rieng cua ban nay
+      TAG: wf810df-${{ inputs.iw_ref }}-b${{ github.run_number }}
+      # So ban build cu giu lai kho kmod tren GitHub Pages (moi ban ~55 MB, gioi han Pages 1 GB)
+      KEEP_KMOD_BUILDS: 8
     # Moi truong github-pages: can de buoc 14 dang kho kmod.
     environment:
       name: github-pages
@@ -76,7 +81,9 @@ jobs:
         run: |
           # Kho kmod rieng: kernel tu build nen kmod kho chinh hang khong cai duoc.
           # Router doc them kho nay -> "apk add kmod-xxx" chay thang.
-          KMOD_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/packages/packages.adb"
+          # Moi firmware tro toi kho kmod CUA CHINH BAN BUILD DO (kmods/<TAG>/), khong phai ban moi nhat
+          # -> nang cap kernel o ban sau khong lam hong "apk add kmod-xxx" tren router chay ban cu.
+          KMOD_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/kmods/$TAG/packages/packages.adb"
           mkdir -p iw/files/etc/apk/repositories.d
           printf '# Kho kmod cua dung kernel firmware nay (GitHub Pages, buoc 14)\n%s\n' "$KMOD_URL" \
             > iw/files/etc/apk/repositories.d/customfeeds.list
@@ -189,7 +196,7 @@ jobs:
             && { echo "LOI: DTB con qcom,dac-preset-short-cable -> WAN se chi chay 100M"; exit 1; } \
             || echo "OK  GE PHY khong dat dac-preset-short-cable"
           # Firmware phai tro toi kho kmod rieng
-          grep -q "github.io/.*/packages/packages.adb" build_dir/target-*/root-qualcommax*/etc/apk/repositories.d/customfeeds.list \
+          grep -q "github.io/.*/kmods/$TAG/packages/packages.adb" build_dir/target-*/root-qualcommax*/etc/apk/repositories.d/customfeeds.list \
             && echo "OK  customfeeds.list tro toi kho kmod" || { echo "LOI: thieu kho kmod trong customfeeds.list"; exit 1; }
           cd $OUT && sha256sum *wf810df* > sha256sums-wf810df.txt && cat sha256sums-wf810df.txt
           
@@ -222,7 +229,7 @@ jobs:
       - name: 13. Dang len Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: wf810df-${{ inputs.iw_ref }}-b${{ github.run_number }}
+          tag_name: ${{ env.TAG }}
           name: WF810DF kernel thu nghiem ${{ inputs.iw_ref }} - build ${{ github.run_number }}
           body: |
             FPT AX3000CV2 (WF-810DF) - ImmortalWrt ${{ inputs.iw_ref }} bien dich tu ma nguon.
@@ -240,18 +247,42 @@ jobs:
             iw/kmods-wf810df.tar.gz
             diffconfig.txt
 
-      - name: 14a. Chuan bi kho kmod cho GitHub Pages
+      - name: 14a. Chuan bi kho kmod cho GitHub Pages (giu nhieu ban build)
         working-directory: iw
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           P=bin/targets/qualcommax/ipq50xx/packages
           test -s $P/packages.adb || { echo "LOI: thieu packages.adb (chi muc kho kmod)"; exit 1; }
-          mkdir -p ../pages/packages
-          cp -a $P/. ../pages/packages/
-          cp public-key.pem ../pages/public-key.pem
-          printf '<h1>Kho kmod WF810DF</h1><p>Build %s (%s). Router: xem /etc/apk/repositories.d/customfeeds.list</p>\n' \
-            "${{ github.run_number }}" "${{ inputs.iw_ref }}" > ../pages/index.html
-          touch ../pages/.nojekyll
-          du -sh ../pages; ls ../pages/packages | grep -c '\.apk$'
+          W=../pages
+          # Ban hien tai: kmods/<TAG>/ (cho firmware nay) + packages/ (ban moi nhat,
+          # giu cho firmware cu da tro toi duong dan /packages/)
+          mkdir -p "$W/kmods/$TAG/packages" "$W/packages"
+          cp -a $P/. "$W/kmods/$TAG/packages/"
+          cp -a $P/. "$W/packages/"
+          cp public-key.pem "$W/public-key.pem"
+          # Cac ban build truoc: lay lai kmods-wf810df.tar.gz tu Releases (luu vinh vien)
+          # -> Pages luon co kho kmod cua KEEP_KMOD_BUILDS ban gan nhat.
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName --jq '.[].tagName' \
+            | grep '^wf810df-' | grep -vx "$TAG" | head -n "$KEEP_KMOD_BUILDS" > ../old-tags.txt || true
+          while read -r t; do
+            [ -n "$t" ] || continue
+            mkdir -p "$W/kmods/$t"
+            if gh release download "$t" --repo "$GITHUB_REPOSITORY" -p kmods-wf810df.tar.gz -O - 2>/dev/null \
+                 | tar -xz -C "$W/kmods/$t" && test -s "$W/kmods/$t/packages/packages.adb"; then
+              echo "OK  giu kho kmod $t"
+            else
+              echo "BO QUA $t (release khong co kmods-wf810df.tar.gz hop le)"; rm -rf "$W/kmods/$t"
+            fi
+          done < ../old-tags.txt
+          {
+            echo '<h1>Kho kmod WF810DF</h1><p>Moi firmware tro toi kho cua dung ban build (xem /etc/apk/repositories.d/customfeeds.list).</p><ul>'
+            for d in $(ls "$W/kmods" | sort -r); do echo "<li>$d</li>"; done
+            echo '</ul>'
+          } > "$W/index.html"
+          touch "$W/.nojekyll"
+          du -sh "$W"; du -sh "$W"/kmods/*
+          SZ=$(du -sm "$W" | cut -f1); [ "$SZ" -lt 950 ] || { echo "LOI: trang Pages ${SZ} MB, sat gioi han 1 GB - giam KEEP_KMOD_BUILDS"; exit 1; }
 
       - name: 14b. Dang kho kmod len GitHub Pages
         uses: actions/upload-pages-artifact@v3
