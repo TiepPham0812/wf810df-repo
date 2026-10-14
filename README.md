@@ -1,80 +1,64 @@
-# WF810DF – ImmortalWrt, kernel tùy chỉnh (thử nghiệm)
+# wf810df-repo – Kho kmod cho FPT AX3000CV2 (WF-810DF)
 
-> **Repo thử nghiệm kernel.** Bản ổn định để dùng hằng ngày: [wf810df-fw](https://github.com/TiepPham0812/wf810df-fw). Repo này chép từ đó và thêm phần tùy chỉnh kernel cho đúng phần cứng WF-810DF. Thay đổi nào chạy ổn trên máy thật thì mới đưa ngược về `wf810df-fw`.
+Kho gói để router **đang chạy firmware [wf810df-fw](https://github.com/TiepPham0812/wf810df-fw)** cài và cập nhật kmod qua **LuCI** hoặc **SSH** (`apk add`). Repo này **không build firmware**. Firmware nạp máy lấy ở `wf810df-fw`.
 
-## Tùy chỉnh kernel
+Trang kho: https://tieppham0812.github.io/wf810df-repo/
 
-- Sửa `kernel/wf810df.config` (cú pháp `.config` của kernel: `CONFIG_X=y`, `=m`, `# CONFIG_X is not set`). Mỗi dòng ghi kèm lý do.
-- Bước 6c chèn file này vào cuối cấu hình kernel ipq50xx của ImmortalWrt (ghi đè mặc định).
-- Bước 10b kiểm tra từng dòng đã thật sự vào kernel; kernel không nhận (thiếu phụ thuộc) thì build báo lỗi.
-- Mỗi bản build xuất `kernel-config-wf810df.txt` vào Releases: cấu hình kernel thật sự đã build, dùng làm căn cứ cho lần sửa sau.
-- Bản vá kernel riêng: đặt vào `device/target/linux/qualcommax/patches-6.12/` (đánh số 9xx để chạy sau bản vá gốc).
-- **Luôn chạy thử bản `initramfs` trong RAM trước** khi nạp NAND bản kernel đã sửa.
+## Vì sao cần kho riêng
 
-## Gốc (từ wf810df-fw)
+Firmware `wf810df-fw` dùng kernel tự build, nên kmod trong kho chính hãng ImmortalWrt không cài được: sai vermagic, `apk` báo lỗi. Kmod đúng kernel nằm trong file `kmods-wf810df.tar.gz` ở Releases của `wf810df-fw`, nhưng có hai trở ngại:
 
+- Mỗi bản build tự ký bằng một khoá riêng, nên router chỉ tin chỉ mục kmod của đúng bản build nó đang chạy.
+- Trang Pages của `wf810df-fw` chỉ giữ bản build mới nhất.
 
-Biên dịch **ImmortalWrt chính hãng** cho **FPT AX3000CV2 bản CV2 (vỏ vuông)** — Actiontec/CIG WF-810DF, Qualcomm IPQ5018 — trên GitHub Actions, không cần máy Linux.
+Repo này gom kmod của mọi bản build, **ký lại chỉ mục bằng một khoá cố định**, xếp theo kernel, rồi đăng lên GitHub Pages. Router tin khoá này một lần là dùng được mãi.
 
-> ⚠️ **Chỉ dành cho CV2 (vỏ vuông).** CV1 (vỏ tròn) dùng phần cứng mạng khác, không nạp bản này.
+## Thiết lập trên router (một lần)
 
-## Nguồn
+SSH vào router rồi chạy:
 
-- Nền thiết bị (cây thiết bị, driver switch YT9215S, board data Wi-Fi): [zcop/immortalwrt](https://github.com/zcop/immortalwrt/tree/wf810df-25.12) nhánh `wf810df-25.12`.
-- Driver YT921x gốc: David Yang (mmyangfl), backport từ Linux 6.19.
-- Port ban đầu và hướng dẫn nạp: [michioxd/openwrt-wf810df](https://github.com/michioxd/openwrt-wf810df).
-- Thảo luận, phân tích lỗi: [VOZ – OpenWrt cho FPT AX3000CV2](https://voz.vn/t/openwrt-cho-fpt-ax3000cv2-voc.1206194/).
+```sh
+wget -qO- https://tieppham0812.github.io/wf810df-repo/setup.sh | sh
+```
 
-## Khác biệt so với bản michioxd
+Script này làm các việc sau:
 
-| | michioxd | Repo này (theo zcop) |
-|---|---|---|
-| Kết nối switch | MDIO bit-bang, có reset cứng | MDIO1, **bỏ qua reset cứng** |
-| Cổng CPU ↔ switch | 2500base-x | **SGMII 1000 Mbps** |
-| Hiệu chuẩn 5 GHz | offset `0x4C000` | **`0x26800`** |
-| 3 cổng LAN | không lên link | đã chạy trên bản của zcop |
-| Treo khi khởi động do driver CMN PLL | có nguy cơ | **đã vá** (bản vá của Stanislaw Pal) |
+1. Đọc phiên bản kernel đang chạy (ví dụ `6.12.103~38a2e620…`) và kiểm tra kho có kmod cho kernel đó.
+2. Cài khoá công khai `/etc/apk/keys/wf810df-repo.pem` và thêm khoá vào `/etc/sysupgrade.conf` để giữ qua nâng cấp.
+3. Thay dòng kho kmod cũ của `wf810df-fw` trong `/etc/apk/repositories.d/customfeeds.list` bằng thư mục đúng kernel. Các dòng khác giữ nguyên.
+4. Chạy `apk update`.
 
-## Gói có sẵn trong firmware
+Sau đó cài gói như bình thường:
+- **LuCI:** Hệ thống → Phần mềm.
+- **SSH:** `apk add kmod-<tên>`.
 
-LuCI tiếng Việt, ttyd, htop, ethtool, tcpdump-mini, **Tailscale**, **WireGuard**, **SQM (cake)**, **File Manager**. Các gói cần kmod phải nằm sẵn ở đây vì kernel tự build (xem mục *Cài gói sau khi nạp*). Bộ gói SQM/WireGuard/File Manager và bộ đệm ccache lấy theo [diepkhoa/sdmc-nr3053-repo](https://github.com/diepkhoa/sdmc-nr3053-repo) (bản NR3053, MediaTek) — chỉ lấy phần dùng chung được, không lấy phần cứng.
+Gói không phải kmod vẫn lấy từ kho chính hãng ImmortalWrt.
 
-## Cách build
+**Sau mỗi lần nâng cấp firmware, chạy lại lệnh trên.** Kernel mới nằm ở thư mục khác; nếu giữ dòng kho cũ thì `apk` sẽ từ chối cài vì không khớp kernel.
 
-1. Tab **Actions** → **Build WF810DF - ImmortalWrt tu ma nguon** → **Run workflow**.
-2. `iw_ref`: phiên bản ImmortalWrt (vd `v25.12.2`). `extra_packages`: gói thêm (vd `luci-app-sqm wireguard-tools`).
-3. Chờ 2–4 giờ (lần đầu); các lần sau nhanh hơn nhờ ccache. File ở tab **Releases**:
-   - `...-squashfs-factory.ubi` — nạp lần đầu
-   - `...-initramfs-uImage.itb` — chạy thử trong RAM, không ghi NAND
-   - `...-squashfs-sysupgrade.bin` — nâng cấp về sau từ LuCI
-   - `kmods-wf810df.tar.gz` — toàn bộ kmod của đúng kernel này
+## Cách kho được cập nhật
 
-## Cài gói sau khi nạp
+Workflow **Cap nhat kho kmod WF810DF** chạy 3 giờ một lần, chạy khi bấm tay, và chạy khi sửa script:
 
-- **Gói thường** (luci-app-*, công cụ): `apk update && apk add <gói>` từ kho ImmortalWrt.
-- **Gói kmod-\***: mỗi firmware trỏ tới kho kmod **của đúng bản build đó** (`.../kmods/<tên-bản-build>/packages/`), nên chỉ cần `apk update && apk add kmod-<tên>`, kể cả khi đã có bản build mới đổi kernel. GitHub Pages giữ kho của 8 bản build gần nhất (`KEEP_KMOD_BUILDS` trong workflow); bản cũ hơn nữa thì lấy `kmods-wf810df.tar.gz` của đúng bản trong Releases (lưu vĩnh viễn) và `apk add --allow-untrusted /tmp/kmod-<tên>*.apk`.
+1. Đọc Releases của `wf810df-fw`. Nếu không có gì mới so với trang đang chạy thì dừng ngay.
+2. Duyệt các bản build từ mới đến cũ. Mỗi kernel (phiên bản + vermagic) chỉ lấy bản build mới nhất.
+3. Lập lại `packages.adb` cho từng kernel, ký bằng secret `REPO_SIGN_KEY`. Các gói `.apk` của ImmortalWrt không mang chữ ký riêng, chỉ chỉ mục được ký.
+4. **Cuốn chiếu:** khi tổng dung lượng chạm 900 MB (`MAX_MB`) thì bỏ các kernel cũ nhất. Kmod của chúng vẫn còn trong Releases của `wf810df-fw`.
+5. Trước khi đăng, giả lập một router chỉ tin khoá của kho và cài thử `kmod-wireguard`, `kmod-dsa-yt921x` cho từng kernel.
 
-### Thiết lập một lần cho kho kmod
+apk-tools được dựng đúng bản ImmortalWrt 25.12 đang dùng (3.0.5).
+
+## Thiết lập một lần cho repo
+
 1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-2. Tạo khoá ký (máy có OpenSSL): `openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem`, rồi dán toàn bộ nội dung file vào **Settings → Secrets and variables → Actions → New repository secret**, tên `APK_SIGN_KEY`. Không commit file này vào repo.
-   Không có secret thì mỗi bản build tự tạo khoá mới, router chỉ tin kho kmod của đúng bản nó đang chạy.
+2. **Tạo khoá ký**, rồi dán vào **Settings → Secrets and variables → Actions → New repository secret**, đặt tên `REPO_SIGN_KEY`. Tạo khoá bằng một trong hai cách:
+   - Trên router (SSH): `apk add openssl-util && openssl ecparam -name prime256v1 -genkey -noout`, rồi copy toàn bộ khối `-----BEGIN EC PRIVATE KEY----- … -----END EC PRIVATE KEY-----`.
+   - Trên Windows có Git Bash: chạy cùng lệnh `openssl ecparam …`.
 
-## Cách nạp
+   Không commit khoá này vào repo. Nếu đổi khoá, mọi router phải chạy lại `setup.sh`.
+3. **Actions → Cap nhat kho kmod WF810DF → Run workflow.**
 
-1. **Sao lưu toàn bộ NAND bản gốc trước tiên** — làm theo mục *0. Back up the original firmware* trong [README của michioxd](https://github.com/michioxd/openwrt-wf810df).
-2. **Chạy thử trong RAM** (không ghi NAND, rút điện là về như cũ), từ U-Boot:
-   ```
-   tftpboot 0x44000000 initramfs.itb
-   bootm 0x44000000
-   ```
-   Kiểm tra: 3 cổng LAN lên link, Wi-Fi 2.4/5 GHz phát được, `dmesg | grep -i yt921`.
-3. Ổn rồi mới nạp `factory.ubi` theo mục *1. Flash firmware* và *2. Set the startup environment* trong README của michioxd.
+## Giới hạn
 
-## Gợi ý sau khi chạy
-
-- **Packet steering đã bật sẵn**: WAN→LAN từ ~600–700 lên ~940 Mbps theo đo đạc trên VOZ.
-- Máy có thể lên **80°C+** khi tải nặng lâu — để nơi thoáng.
-
-## Cảnh báo
-
-Firmware thử nghiệm, chưa được kiểm chứng trên máy thật từ repo này. Tự chịu rủi ro.
+- Kho chỉ có kmod của những kernel đã build ở `wf810df-fw`. Muốn **đổi cấu hình kernel** (bật hoặc tắt tính năng trong kernel) thì phải build firmware mới ở `wf810df-fw` và nạp lại. `apk` không thay được kernel đang chạy.
+- Các bản build có cùng vermagic dùng chung kmod của bản mới nhất. Đây là cách OpenWrt và ImmortalWrt vẫn xác định tính tương thích của kmod.

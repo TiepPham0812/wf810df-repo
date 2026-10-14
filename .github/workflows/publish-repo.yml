@@ -1,0 +1,136 @@
+name: Cap nhat kho kmod WF810DF
+
+# Kho goi (KHONG build firmware). Lay kmods-wf810df.tar.gz tu Releases cua
+# wf810df-fw, ky lai chi muc bang khoa co dinh REPO_SIGN_KEY, dang len GitHub Pages.
+# Router chay firmware wf810df-fw: "wget -qO- <trang>/setup.sh | sh" mot lan,
+# sau do cai/cap nhat kmod qua LuCI hoac "apk add".
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Dung lai kho ke ca khi Releases cua wf810df-fw khong doi"
+        type: boolean
+        default: false
+  schedule:
+    # 3 gio/lan: co ban build moi o wf810df-fw thi tu dua vao kho
+    - cron: "17 */3 * * *"
+  push:
+    branches: [main]
+    paths: ["scripts/**", "router/**", ".github/workflows/publish-repo.yml"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publish-repo
+  cancel-in-progress: false
+
+env:
+  SRC_REPO: TiepPham0812/wf810df-fw
+  # Cuon chieu: tong dung luong trang cham nguong nay thi bo kernel cu nhat (gioi han Pages 1 GB)
+  MAX_MB: 900
+  # apk-tools dung dung ban ImmortalWrt 25.12 dang dung (package/system/apk/Makefile)
+  APK_TOOLS_REF: b5a31c0d865342ad80be10d68f1bb3d3ad9b0866
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: 1. Lay ma nguon
+        uses: actions/checkout@v6
+
+      - name: 2. Kiem tra co gi moi khong
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          echo "BASE=$BASE" >> "$GITHUB_ENV"
+          # Dau van tay = danh sach asset kmod cua wf810df-fw + noi dung script cua repo nay
+          {
+            gh api --paginate "repos/$SRC_REPO/releases?per_page=100" \
+              --jq '.[] | select(.draft | not) | .assets[] | select(.name == "kmods-wf810df.tar.gz") | "\(.id) \(.updated_at)"' | sort
+            cat scripts/build-repo.sh router/setup.sh .github/workflows/publish-repo.yml | sha256sum
+          } | sha256sum | cut -d' ' -f1 > state.txt
+          OLD=$(curl -fsS "$BASE/state.txt" 2>/dev/null || true)
+          echo "Moi: $(cat state.txt)  Dang chay: ${OLD:-chua co}"
+          if [ "$(cat state.txt)" = "$OLD" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "Khong co gi moi - bo qua."; echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 3. Kiem tra khoa ky
+        if: steps.check.outputs.changed == 'true'
+        env:
+          REPO_SIGN_KEY: ${{ secrets.REPO_SIGN_KEY }}
+        run: |
+          if [ -z "$REPO_SIGN_KEY" ]; then
+            echo "LOI: chua co secret REPO_SIGN_KEY (khoa rieng EC prime256v1). Xem README muc 'Thiet lap mot lan'."
+            echo "Khong ky bang khoa tam: moi lan doi khoa, router phai chay lai setup.sh."
+            exit 1
+          fi
+          printf '%s\n' "$REPO_SIGN_KEY" > "$RUNNER_TEMP/sign.pem"
+          openssl ec -in "$RUNNER_TEMP/sign.pem" -noout || { echo "LOI: REPO_SIGN_KEY khong phai khoa EC hop le"; exit 1; }
+
+      - name: 4. Dung apk-tools ${{ env.APK_TOOLS_REF }}
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q meson ninja-build pkg-config libssl-dev zlib1g-dev
+          git clone -q https://github.com/alpinelinux/apk-tools.git "$RUNNER_TEMP/apk-tools"
+          cd "$RUNNER_TEMP/apk-tools" && git checkout -q "$APK_TOOLS_REF"
+          meson setup build -Ddefault_library=static -Dlua=disabled -Ddocs=disabled -Dhelp=disabled -Dtests=disabled -Dzstd=disabled >/dev/null
+          ninja -C build src/apk >/dev/null
+          ./build/src/apk --version
+          echo "APK=$RUNNER_TEMP/apk-tools/build/src/apk" >> "$GITHUB_ENV"
+
+      - name: 5. Dung kho kmod (cuon chieu ${{ env.MAX_MB }} MB)
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OUT=site SIGN_KEY="$RUNNER_TEMP/sign.pem" bash scripts/build-repo.sh
+          sed "s|__BASE__|$BASE|g" router/setup.sh > site/setup.sh
+          cp state.txt site/state.txt
+          touch site/.nojekyll
+          {
+            echo '<!doctype html><meta charset="utf-8"><title>Kho kmod WF810DF</title>'
+            echo '<h1>Kho kmod WF810DF</h1>'
+            echo "<p>Cho router FPT AX3000CV2 chay firmware <a href=\"https://github.com/$SRC_REPO\">wf810df-fw</a>. Thiet lap 1 lan qua SSH (chay lai sau moi lan nang cap firmware):</p>"
+            echo "<pre>wget -qO- $BASE/setup.sh | sh</pre>"
+            echo '<p>Kernel dang co:</p><table border="1" cellpadding="4"><tr><th>Kernel</th><th>Lay tu ban build</th><th>Ngay</th></tr>'
+            awk -F'\t' '{printf "<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n",$1,$2,$3}' site/builds.tsv
+            echo "</table><p>Khoa cong khai: <a href=\"wf810df-repo.pem\">wf810df-repo.pem</a></p>"
+          } > site/index.html
+          rm -f "$RUNNER_TEMP/sign.pem"
+          du -sh site
+
+      - name: 6. Kiem tra kho truoc khi dang
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          # Gia lap router: chi tin khoa cua kho, cai thu kmod tu tung thu muc kernel
+          for d in $(cat site/kmods.txt); do
+            R="$RUNNER_TEMP/root-$d"; mkdir -p "$R/etc/apk/keys"; echo aarch64_cortex-a53 > "$R/etc/apk/arch"
+            cp site/wf810df-repo.pem "$R/etc/apk/keys/"
+            "$APK" --root "$R" --initdb --repositories-file /dev/null --repository "$PWD/site/kmods/$d/packages.adb" \
+              --no-network --no-scripts --no-cache add kernel kmod-wireguard kmod-dsa-yt921x >/dev/null \
+              && echo "OK   $d: cai thu kmod-wireguard + kmod-dsa-yt921x" || { echo "LOI: $d khong cai duoc"; exit 1; }
+          done
+          grep -q "https://" site/setup.sh && ! grep -q "__BASE__" site/setup.sh && echo "OK   setup.sh"
+
+      - name: 7a. Dong goi trang
+        if: steps.check.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: 7b. Dang len GitHub Pages
+        if: steps.check.outputs.changed == 'true'
+        id: deploy
+        uses: actions/deploy-pages@v4
