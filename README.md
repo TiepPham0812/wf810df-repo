@@ -1,4 +1,4 @@
-# wf810df-repo – Kho kmod cho FPT AX3000CV2 (WF-810DF)
+# wf810df-repo – Kho kmod cho  (WF-810DF)
 
 Kho gói để router **đang chạy firmware [wf810df-fw](https://github.com/TiepPham0812/wf810df-fw)** cài và cập nhật kmod qua **LuCI** hoặc **SSH** (`apk add`). Repo này **không build firmware**. Firmware nạp máy lấy ở `wf810df-fw`.
 
