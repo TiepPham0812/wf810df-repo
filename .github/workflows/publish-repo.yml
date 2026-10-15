@@ -135,8 +135,9 @@ jobs:
             R="$RUNNER_TEMP/root-$d"; mkdir -p "$R/etc/apk/keys"; echo aarch64_cortex-a53 > "$R/etc/apk/arch"
             cp site/wf810df-repo.pem "$R/etc/apk/keys/"
             "$APK" --root "$R" --initdb --repositories-file /dev/null --repository "$PWD/site/kmods/$d/packages.adb" \
-              --no-network --no-scripts --no-cache add kernel kmod-wireguard kmod-dsa-yt921x >/dev/null \
-              && echo "OK   $d: cai thu kmod-wireguard + kmod-dsa-yt921x" || { echo "LOI: $d khong cai duoc"; exit 1; }
+              --no-network --no-scripts --no-cache add --usermode kernel kmod-wireguard kmod-dsa-yt921x \
+              > "$R.log" 2>&1 \
+              && echo "OK   $d: cai thu kmod-wireguard + kmod-dsa-yt921x" || { echo "::error title=Kho $d khong cai duoc::$(tail -3 "$R.log" | tr '\n' ' ')"; exit 1; }
           done
           grep -q "https://" site/setup.sh && ! grep -q "__BASE__" site/setup.sh && echo "OK   setup.sh"
 
