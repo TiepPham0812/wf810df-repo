@@ -1,7 +1,7 @@
 # Quy tắc dự án wf810df-repo (kho kmod)
 
 ## Vai trò
-- **Kho gói kmod** cho FPT AX3000CV2 (WF-810DF) chạy firmware `TiepPham0812/wf810df-fw`. **Không build firmware** ở đây (chủ repo nói rõ 14/10/2026: firmware đã có ở wf810df-fw).
+- **Kho gói kmod** cho WF810DF chạy firmware `TiepPham0812/wf810df-fw`. **Không build firmware** ở đây (chủ repo nói rõ 14/10/2026: firmware đã có ở wf810df-fw).
 - Nguồn kmod duy nhất: `kmods-wf810df.tar.gz` trong Releases của wf810df-fw. Không biên dịch lại kmod: kmod phải đúng kernel của firmware đã nạp.
 
 ## Cơ chế (đã chạy thử 14/10/2026)
@@ -12,7 +12,8 @@
 - Bước 6 của workflow (giả lập router chỉ tin khoá kho, cài thử `kmod-wireguard` + `kmod-dsa-yt921x`) **không được nới lỏng hay xoá**.
 
 ## Quy tắc
-- Không commit khoá riêng. Không ký bằng khoá tạm khi thiếu secret: workflow phải dừng.
+- Không commit khoá riêng. Không ký bằng khoá tạm khi thiếu secret: không đăng kho (chạy theo lịch thì cảnh báo và bỏ qua, bấm tay thì báo lỗi).
+- Từ bản b7 (14/10/2026) `wf810df-fw` đã đồng bộ kernel với ImmortalWrt chính hãng, router dùng thẳng kho kmods/ chính hãng; repo này chủ yếu còn phục vụ router chạy b1–b6.
 - Không đổi cấu trúc đường dẫn `kmods/<dir>/packages.adb`, `kmods.txt`, `wf810df-repo.pem`, `setup.sh` khi chưa sửa đồng thời `router/setup.sh` (router đang dùng).
 - Không push thẳng vào nhánh chính, không tự merge PR.
 - Trả lời, mô tả Issue/PR bằng tiếng Việt.
