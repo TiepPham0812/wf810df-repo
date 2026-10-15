@@ -1,5 +1,7 @@
 # wf810df-repo – Kho kmod cho  (WF-810DF)
 
+> Từ bản **b7** của `wf810df-fw`, kernel đã đồng bộ với ImmortalWrt chính hãng: router cài kmod thẳng từ kho chính hãng, **không cần kho này**. Kho này chỉ dành cho router còn chạy b1–b6.
+
 Kho gói để router **đang chạy firmware [wf810df-fw](https://github.com/TiepPham0812/wf810df-fw)** cài và cập nhật kmod qua **LuCI** hoặc **SSH** (`apk add`). Repo này **không build firmware**. Firmware nạp máy lấy ở `wf810df-fw`.
 
 Trang kho: https://tieppham0812.github.io/wf810df-repo/
