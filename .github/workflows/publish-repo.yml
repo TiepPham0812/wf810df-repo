@@ -77,12 +77,23 @@ jobs:
             # Chay theo lich: chi canh bao va bo qua, khong bao loi moi 3 gio.
             # Bam tay: bao loi de thay ngay.
             MSG="Chua co secret REPO_SIGN_KEY - khong dang kho. Xem README muc 'Thiet lap mot lan'."
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "LOI: $MSG"; exit 1; fi
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "::error title=Thieu REPO_SIGN_KEY::$MSG"; exit 1; fi
             echo "::warning::$MSG"; echo "ready=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
-          printf '%s\n' "$REPO_SIGN_KEY" > "$RUNNER_TEMP/sign.pem"
-          openssl ec -in "$RUNNER_TEMP/sign.pem" -noout || { echo "LOI: REPO_SIGN_KEY khong phai khoa EC hop le"; exit 1; }
+          printf '%s\n' "$REPO_SIGN_KEY" | tr -d '\r' > "$RUNNER_TEMP/sign.pem"
+          if ! openssl ec -in "$RUNNER_TEMP/sign.pem" -noout 2>/dev/null; then
+            # Chan doan, KHONG in noi dung khoa
+            F="$RUNNER_TEMP/sign.pem"
+            HDR=$(grep -o -- '-----BEGIN [A-Z ]*-----' "$F" | tr '\n' ' ')
+            if grep -q 'BEGIN PUBLIC KEY' "$F"; then WHY="day la khoa CONG KHAI, can khoa RIENG (BEGIN EC PRIVATE KEY)"
+            elif [ -z "$HDR" ]; then WHY="thieu dong -----BEGIN ...----- (copy thieu dau/cuoi khoi)"
+            elif ! grep -q -- '-----END' "$F"; then WHY="thieu dong -----END ...----- (copy thieu cuoi khoi)"
+            else WHY="noi dung giua BEGIN/END bi hong hoac khong phai khoa EC"; fi
+            echo "::error title=REPO_SIGN_KEY sai::$WHY. Cac khoi tim thay: ${HDR:-khong co}. Do dai $(wc -c < "$F") byte, $(wc -l < "$F") dong."
+            exit 1
+          fi
+          echo "OK  REPO_SIGN_KEY hop le ($(openssl ec -in "$RUNNER_TEMP/sign.pem" -text -noout 2>/dev/null | grep -o 'prime256v1\|secp[0-9a-z]*' | head -1))"
 
       - name: 4. Dung apk-tools ${{ env.APK_TOOLS_REF }}
         if: steps.check.outputs.changed == 'true' && steps.key.outputs.ready == 'true'
